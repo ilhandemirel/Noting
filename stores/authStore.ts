@@ -1,0 +1,218 @@
+import { create } from 'zustand';
+import pb from '../services/pocketbase';
+import * as WebBrowser from 'expo-web-browser';
+import * as Linking from 'expo-linking';
+import { Platform } from 'react-native';
+
+WebBrowser.maybeCompleteAuthSession();
+
+interface User {
+    id: string;
+    email: string;
+    name?: string;
+}
+
+interface AuthState {
+    user: User | null;
+    token: string | null;
+    isAuthenticated: boolean;
+    isLoading: boolean;
+    error: string | null;
+    initialize: () => void;
+    login: (email: string, password: string) => Promise<void>;
+    loginWithGoogle: () => Promise<void>;
+    register: (email: string, password: string, passwordConfirm: string) => Promise<void>;
+    logout: () => void;
+    clearError: () => void;
+}
+
+export const useAuthStore = create<AuthState>((set) => ({
+    user: null,
+    token: null,
+    isAuthenticated: false,
+    isLoading: false,
+    error: null,
+
+    // Restore session from PocketBase's persisted authStore
+    initialize: () => {
+        if (pb.authStore.isValid && pb.authStore.record) {
+            const record = pb.authStore.record;
+            set({
+                user: {
+                    id: record.id,
+                    email: record.email || '',
+                    name: (record as any).name || '',
+                },
+                token: pb.authStore.token,
+                isAuthenticated: true,
+            });
+        } else {
+            pb.authStore.clear();
+            set({
+                user: null,
+                token: null,
+                isAuthenticated: false,
+            });
+        }
+    },
+
+    login: async (email: string, password: string) => {
+        set({ isLoading: true, error: null });
+        try {
+            const authData = await pb.collection('users').authWithPassword(email, password);
+            set({
+                user: {
+                    id: authData.record.id,
+                    email: authData.record.email,
+                    name: authData.record.name,
+                },
+                token: authData.token,
+                isAuthenticated: true,
+                isLoading: false,
+            });
+        } catch (err: any) {
+            let errorMessage = 'Giris basarisiz. Lutfen tekrar deneyin.';
+
+            const errData = err?.data?.data || err?.response?.data;
+            if (errData && typeof errData === 'object') {
+                const fields = Object.values(errData).map((v: any) => v.message);
+                if (fields.length > 0) {
+                    errorMessage = fields.join('\n');
+                }
+            } else if (err?.message) {
+                errorMessage = err.message;
+            }
+
+            set({
+                error: errorMessage,
+                isLoading: false,
+            });
+        }
+    },
+
+    loginWithGoogle: async () => {
+        set({ isLoading: true, error: null });
+        try {
+            if (Platform.OS === 'web') {
+                const authData = await pb.collection('users').authWithOAuth2({ provider: 'google' });
+                set({
+                    user: {
+                        id: authData.record.id,
+                        email: authData.record.email,
+                        name: authData.record.name || authData.meta?.name || '',
+                    },
+                    token: authData.token,
+                    isAuthenticated: true,
+                    isLoading: false,
+                });
+                return;
+            }
+
+            const redirectUrl = Linking.createURL('/(auth)/login');
+            const authMethods = await pb.collection('users').listAuthMethods();
+            const provider = (authMethods as any).authProviders.find((p: any) => p.name === 'google');
+
+            if (!provider) throw new Error('Google provider not configured');
+
+            const authUrl = provider.authUrl + redirectUrl;
+            const response = await WebBrowser.openAuthSessionAsync(authUrl, redirectUrl);
+
+            if (response.type === 'success') {
+                const parsedUrl = Linking.parse(response.url);
+                const code = parsedUrl.queryParams?.code as string;
+                const state = parsedUrl.queryParams?.state as string;
+
+                if (state !== provider.state) {
+                    throw new Error('State mismatch, authentication aborted');
+                }
+
+                if (code && provider.codeVerifier) {
+                    const authData = await pb.collection('users').authWithOAuth2Code(
+                        'google',
+                        code,
+                        provider.codeVerifier,
+                        redirectUrl
+                    );
+
+                    set({
+                        user: {
+                            id: authData.record.id,
+                            email: authData.record.email,
+                            name: authData.record.name || authData.meta?.name || '',
+                        },
+                        token: authData.token,
+                        isAuthenticated: true,
+                        isLoading: false,
+                    });
+                } else {
+                    throw new Error('Could not get authorization code');
+                }
+            } else {
+                throw new Error('Authentication cancelled by user');
+            }
+        } catch (err: any) {
+            let errorMessage = 'Google ile giris basarisiz. Lutfen tekrar deneyin.';
+
+            if (err?.message) {
+                errorMessage = err.message;
+            }
+
+            set({
+                error: errorMessage,
+                isLoading: false,
+            });
+        }
+    },
+
+    register: async (email: string, password: string, passwordConfirm: string) => {
+        set({ isLoading: true, error: null });
+        try {
+            await pb.collection('users').create({
+                email,
+                password,
+                passwordConfirm,
+            });
+            // Auto-login after registration
+            const authData = await pb.collection('users').authWithPassword(email, password);
+            set({
+                user: {
+                    id: authData.record.id,
+                    email: authData.record.email,
+                    name: authData.record.name,
+                },
+                token: authData.token,
+                isAuthenticated: true,
+                isLoading: false,
+            });
+        } catch (err: any) {
+            let errorMessage = 'Kayit basarisiz. Lutfen tekrar deneyin.';
+
+            const errData = err?.data?.data || err?.response?.data;
+            if (errData && typeof errData === 'object') {
+                const fields = Object.values(errData).map((v: any) => v.message);
+                if (fields.length > 0) {
+                    errorMessage = fields.join('\n');
+                }
+            } else if (err?.message) {
+                errorMessage = err.message;
+            }
+
+            set({
+                error: errorMessage,
+                isLoading: false,
+            });
+        }
+    },
+
+    logout: () => {
+        pb.authStore.clear();
+        set({
+            user: null,
+            token: null,
+            isAuthenticated: false,
+            error: null,
+        });
+    },
+
+    clearError: () => set({ error: null }),
+}));
