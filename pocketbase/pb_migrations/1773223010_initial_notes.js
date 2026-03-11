@@ -52,7 +52,7 @@ migrate((app) => {
       },
       {
         "id": "autodate2341372968",
-        "name": "created",
+        "name": "created_at",
         "type": "autodate",
         "system": false,
         "required": false,
@@ -62,7 +62,7 @@ migrate((app) => {
       },
       {
         "id": "autodate1130519967",
-        "name": "updated",
+        "name": "updated_at",
         "type": "autodate",
         "system": false,
         "required": false,
