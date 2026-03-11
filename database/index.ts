@@ -18,4 +18,14 @@ const database = new Database({
     modelClasses: [Note],
 });
 
+export const resetDatabase = async () => {
+    try {
+        await database.unsafeResetDatabase();
+        console.log('[DB] Database reset successfully');
+    } catch (error) {
+        console.error('[DB] Failed to reset database:', error);
+        throw error;
+    }
+};
+
 export default database;

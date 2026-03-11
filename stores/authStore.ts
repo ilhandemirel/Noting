@@ -211,8 +211,20 @@ export const useAuthStore = create<AuthState>((set) => ({
         }
     },
 
-    logout: () => {
+    logout: async () => {
         pb.authStore.clear();
+        
+        // Reset local database and UI stores
+        try {
+            const { resetDatabase } = await import('../database');
+            const { useNoteStore } = await import('./noteStore');
+            
+            await resetDatabase();
+            useNoteStore.getState().reset();
+        } catch (error) {
+            console.error('[Auth] Logout cleanup error:', error);
+        }
+
         set({
             user: null,
             token: null,

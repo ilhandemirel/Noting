@@ -40,6 +40,7 @@ interface NoteState {
     moveNoteToFolder: (noteId: string, folderId: string | null) => Promise<void>;
     clearFolderAssignmentsForFolder: (folderId: string) => Promise<void>;
     clearActiveNote: () => void;
+    reset: () => void;
 }
 
 const DEFAULT_CONTENT = JSON.stringify([{ type: 'text', content: '' }]);
@@ -390,4 +391,14 @@ export const useNoteStore = create<NoteState>((set, get) => ({
     },
 
     clearActiveNote: () => set({ activeNote: null }),
+
+    reset: () => set({
+        notes: [],
+        activeNote: null,
+        trashedNotes: [],
+        noteFolderMap: {},
+        isLoading: false,
+        trashLoaded: false,
+        folderMapLoaded: false,
+    }),
 }));
