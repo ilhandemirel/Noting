@@ -43,9 +43,19 @@ interface NoteState {
     reset: () => void;
 }
 
+import { useAuthStore } from './authStore';
+
 const DEFAULT_CONTENT = JSON.stringify([{ type: 'text', content: '' }]);
-const TRASH_KEY = 'noting.trashedNotes.v1';
-const FOLDER_MAP_KEY = 'noting.noteFolderMap.v1';
+
+function getTrashKey() {
+    const userId = useAuthStore.getState().user?.id;
+    return userId ? `noting.trashedNotes.${userId}.v1` : 'noting.trashedNotes.anonymous.v1';
+}
+
+function getFolderMapKey() {
+    const userId = useAuthStore.getState().user?.id;
+    return userId ? `noting.noteFolderMap.${userId}.v1` : 'noting.noteFolderMap.anonymous.v1';
+}
 
 function normalizeTitle(value: string) {
     const trimmed = value.trim();
@@ -73,11 +83,11 @@ function sortTrashByDeletedAtDesc(items: TrashedNoteItem[]) {
 }
 
 async function persistTrash(items: TrashedNoteItem[]) {
-    await AsyncStorage.setItem(TRASH_KEY, JSON.stringify(items));
+    await AsyncStorage.setItem(getTrashKey(), JSON.stringify(items));
 }
 
 async function persistFolderMap(map: Record<string, string>) {
-    await AsyncStorage.setItem(FOLDER_MAP_KEY, JSON.stringify(map));
+    await AsyncStorage.setItem(getFolderMapKey(), JSON.stringify(map));
 }
 
 export const useNoteStore = create<NoteState>((set, get) => ({
@@ -242,7 +252,7 @@ export const useNoteStore = create<NoteState>((set, get) => ({
         if (get().trashLoaded) return;
 
         try {
-            const raw = await AsyncStorage.getItem(TRASH_KEY);
+            const raw = await AsyncStorage.getItem(getTrashKey());
             if (!raw) {
                 set({ trashedNotes: [], trashLoaded: true });
                 return;
@@ -314,7 +324,7 @@ export const useNoteStore = create<NoteState>((set, get) => ({
     clearTrash: async () => {
         set({ trashedNotes: [] });
         try {
-            await AsyncStorage.removeItem(TRASH_KEY);
+            await AsyncStorage.removeItem(getTrashKey());
         } catch (err) {
             console.error('clearTrash error:', err);
         }
@@ -324,7 +334,7 @@ export const useNoteStore = create<NoteState>((set, get) => ({
         if (get().folderMapLoaded) return;
 
         try {
-            const raw = await AsyncStorage.getItem(FOLDER_MAP_KEY);
+            const raw = await AsyncStorage.getItem(getFolderMapKey());
             if (!raw) {
                 set({ noteFolderMap: {}, folderMapLoaded: true });
                 return;
