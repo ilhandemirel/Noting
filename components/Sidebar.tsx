@@ -1,26 +1,25 @@
-import React, { useState, useEffect, useCallback, useRef, memo } from 'react';
+import React, { useEffect, useCallback, useRef, memo } from 'react';
 import {
-    View, Text, Pressable, Animated, TextInput, FlatList,
-    Dimensions, StyleSheet, Platform
+    View, Text, Pressable, Animated, FlatList,
+    StyleSheet, Platform, Dimensions
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useAuthStore } from '../stores/authStore';
-import { useFolderStore } from '../stores/folderStore';
 import { useNoteStore } from '../stores/noteStore';
 import { useNetworkStore } from '../stores/networkStore';
 import { useThemeStore, useColors } from '../stores/themeStore';
 
-const SIDEBAR_WIDTH = 280;
+const { width: SCREEN_WIDTH } = Dimensions.get('window');
+const SIDEBAR_WIDTH = Math.min(260, SCREEN_WIDTH * 0.75);
 
 interface SidebarProps {
     isOpen: boolean;
     onToggle: () => void;
 }
 
-// Memoized note item
-const NoteItem = memo(({ note, colors, onPress }: {
-    note: { id: string; title: string };
+const SidebarNoteItem = memo(({ note, colors, onPress }: {
+    note: { id: string; title: string; updatedAt: Date; isSynced: boolean };
     colors: any;
     onPress: (id: string) => void;
 }) => (
@@ -31,91 +30,29 @@ const NoteItem = memo(({ note, colors, onPress }: {
         ]}
         onPress={() => onPress(note.id)}
     >
-        <Ionicons name="document-text-outline" size={14} color={colors.placeholder} />
-        <Text
-            style={[styles.noteTitle, { color: colors.secondary }]}
-            numberOfLines={1}
-        >
-            {note.title || 'Başlıksız'}
-        </Text>
+        <View style={[styles.noteIcon, { backgroundColor: colors.accentSoft }]}>
+            <Ionicons name="document-text" size={14} color={colors.accent} />
+        </View>
+        <View style={styles.noteInfo}>
+            <Text style={[styles.noteTitle, { color: colors.text }]} numberOfLines={1}>
+                {note.title || 'Başlıksız'}
+            </Text>
+            <Text style={[styles.noteDate, { color: colors.textSecondary }]}>
+                {note.updatedAt.toLocaleDateString('tr-TR')}
+            </Text>
+        </View>
+        {!note.isSynced && (
+            <Ionicons name="cloud-offline-outline" size={12} color={colors.warning} />
+        )}
     </Pressable>
 ));
 
-// Memoized folder item
-const FolderItem = memo(({ folder, isExpanded, isSelected, folderNotes, colors, onToggle, onNewNote, onNotePress }: {
-    folder: { id: string; name: string };
-    isExpanded: boolean;
-    isSelected: boolean;
-    folderNotes: { id: string; title: string }[];
-    colors: any;
-    onToggle: (id: string) => void;
-    onNewNote: (id: string) => void;
-    onNotePress: (id: string) => void;
-}) => (
-    <View style={{ marginBottom: 2 }}>
-        <Pressable
-            style={({ pressed }) => [
-                styles.folderRow,
-                {
-                    backgroundColor: isSelected
-                        ? colors.hover
-                        : pressed ? colors.gray : 'transparent',
-                }
-            ]}
-            onPress={() => onToggle(folder.id)}
-        >
-            <Ionicons
-                name={isExpanded ? 'chevron-down' : 'chevron-forward'}
-                size={12}
-                color={colors.secondary}
-            />
-            <Ionicons
-                name={isExpanded ? 'folder-open' : 'folder'}
-                size={16}
-                color={colors.accent}
-                style={{ marginLeft: 6 }}
-            />
-            <Text
-                style={[styles.folderName, { color: colors.text }]}
-                numberOfLines={1}
-            >
-                {folder.name}
-            </Text>
-            <Pressable
-                onPress={() => onNewNote(folder.id)}
-                style={styles.addNoteBtn}
-                hitSlop={8}
-            >
-                <Ionicons name="add" size={16} color={colors.secondary} />
-            </Pressable>
-        </Pressable>
-
-        {isExpanded && (
-            <View style={{ marginLeft: 28 }}>
-                {folderNotes.length === 0 ? (
-                    <Text style={[styles.emptyText, { color: colors.placeholder }]}>
-                        Not yok
-                    </Text>
-                ) : (
-                    folderNotes.map((note) => (
-                        <NoteItem key={note.id} note={note} colors={colors} onPress={onNotePress} />
-                    ))
-                )}
-            </View>
-        )}
-    </View>
-));
-
 export default function Sidebar({ isOpen, onToggle }: SidebarProps) {
-    const [isAddingFolder, setIsAddingFolder] = useState(false);
-    const [newFolderName, setNewFolderName] = useState('');
-    const [expandedFolders, setExpandedFolders] = useState<Record<string, boolean>>({});
     const slideAnim = useRef(new Animated.Value(-SIDEBAR_WIDTH - 20)).current;
     const overlayAnim = useRef(new Animated.Value(0)).current;
 
     const user = useAuthStore((s) => s.user);
     const logout = useAuthStore((s) => s.logout);
-    const { folders, selectedFolderId, loadFolders, createFolder, deleteFolder, selectFolder } = useFolderStore();
     const { notes, loadNotes, createNote } = useNoteStore();
     const isConnected = useNetworkStore((s) => s.isConnected);
     const isDark = useThemeStore((s) => s.isDark);
@@ -124,21 +61,15 @@ export default function Sidebar({ isOpen, onToggle }: SidebarProps) {
     const router = useRouter();
 
     useEffect(() => {
-        loadFolders();
-    }, []);
-
-    useEffect(() => {
-        const expandedIds = Object.keys(expandedFolders).filter((k) => expandedFolders[k]);
-        if (expandedIds.length > 0) {
-            loadNotes();
-        }
-    }, [expandedFolders]);
+        if (isOpen) loadNotes();
+    }, [isOpen]);
 
     useEffect(() => {
         Animated.parallel([
-            Animated.timing(slideAnim, {
+            Animated.spring(slideAnim, {
                 toValue: isOpen ? 0 : -SIDEBAR_WIDTH - 20,
-                duration: 250,
+                friction: 20,
+                tension: 70,
                 useNativeDriver: true,
             }),
             Animated.timing(overlayAnim, {
@@ -149,85 +80,51 @@ export default function Sidebar({ isOpen, onToggle }: SidebarProps) {
         ]).start();
     }, [isOpen]);
 
-    const handleAddFolder = useCallback(async () => {
-        if (!newFolderName.trim()) return;
-        const folderId = await createFolder(newFolderName.trim());
-        setNewFolderName('');
-        setIsAddingFolder(false);
-        if (folderId) {
-            setExpandedFolders((prev) => ({ ...prev, [folderId]: true }));
-        }
-    }, [newFolderName, createFolder]);
-
-    const handleNewNote = useCallback(async (folderId?: string | null) => {
-        if (folderId) {
-            selectFolder(folderId);
-        }
-        const noteId = await createNote(folderId || null);
-        if (noteId) {
-            onToggle(); // close sidebar on mobile
-            router.push(`/(main)/note/${noteId}`);
-        }
-    }, [selectFolder, createNote, onToggle, router]);
-
     const handleQuickNote = useCallback(async () => {
-        const noteId = await createNote(null);
+        const noteId = await createNote();
         if (noteId) {
             onToggle();
             router.push(`/(main)/note/${noteId}`);
         }
     }, [createNote, onToggle, router]);
 
-    const toggleFolder = useCallback((folderId: string) => {
-        setExpandedFolders((prev) => ({
-            ...prev,
-            [folderId]: !prev[folderId],
-        }));
-        selectFolder(folderId);
-    }, [selectFolder]);
-
     const handleNotePress = useCallback((noteId: string) => {
-        onToggle(); // close sidebar
+        onToggle();
         router.push(`/(main)/note/${noteId}`);
     }, [onToggle, router]);
-
-    const notesForFolder = useCallback((folderId: string) =>
-        notes.filter((n) => n.folderId === folderId),
-        [notes]
-    );
 
     const handleLogout = useCallback(() => {
         logout();
         router.replace('/(auth)/login');
     }, [logout, router]);
 
+    const handleClose = useCallback(() => {
+        onToggle();
+    }, [onToggle]);
+
+    const handleToggleTheme = useCallback(() => {
+        toggleTheme();
+    }, [toggleTheme]);
+
     return (
         <>
-            {/* Overlay - clickable area to close sidebar */}
+            {/* Overlay */}
             {isOpen && (
                 <Pressable
-                    style={[
-                        StyleSheet.absoluteFill,
-                        styles.overlay,
-                    ]}
-                    onPress={onToggle}
-                    accessibilityRole="button"
-                    accessibilityLabel="Menüyü kapat"
+                    style={[StyleSheet.absoluteFill, styles.overlay]}
+                    onPress={handleClose}
                 >
                     <Animated.View
                         pointerEvents="none"
                         style={[
                             StyleSheet.absoluteFill,
-                            {
-                                backgroundColor: colors.overlay,
-                                opacity: overlayAnim,
-                            }
+                            { backgroundColor: colors.overlay, opacity: overlayAnim }
                         ]}
                     />
                 </Pressable>
             )}
 
-            {/* Sidebar Panel */}
+            {/* Sidebar */}
             <Animated.View
                 style={[
                     styles.sidebar,
@@ -243,108 +140,90 @@ export default function Sidebar({ isOpen, onToggle }: SidebarProps) {
                     {/* Header */}
                     <View style={styles.header}>
                         <View style={styles.headerLeft}>
-                            <Text style={[styles.logo, { color: colors.text }]}>
-                                Noting
-                            </Text>
+                            <View style={[styles.brandDot, { backgroundColor: colors.accent }]} />
+                            <Text style={[styles.brand, { color: colors.heading }]}>Noting</Text>
                             <View style={[
-                                styles.connectionDot,
-                                { backgroundColor: isConnected ? '#27AE60' : '#EB5757' }
+                                styles.statusDot,
+                                { backgroundColor: isConnected ? '#10B981' : '#EF4444' }
                             ]} />
                         </View>
                         <View style={styles.headerRight}>
+                            {/* Dark/Light Theme Toggle */}
                             <Pressable
-                                onPress={toggleTheme}
-                                style={({ pressed }) => [
-                                    styles.iconBtn,
-                                    { backgroundColor: pressed ? colors.hover : 'transparent' }
+                                onPress={handleToggleTheme}
+                                style={[
+                                    styles.themeBtn,
+                                    { backgroundColor: colors.hover }
                                 ]}
                             >
                                 <Ionicons
-                                    name={isDark ? 'sunny-outline' : 'moon-outline'}
+                                    name={isDark ? 'sunny' : 'moon'}
                                     size={18}
-                                    color={colors.secondary}
+                                    color={colors.accent}
                                 />
                             </Pressable>
+                            {/* Close Button - BÜYÜK */}
                             <Pressable
-                                onPress={onToggle}
-                                hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
-                                style={({ pressed }) => [
+                                onPress={handleClose}
+                                style={[
                                     styles.closeBtn,
-                                    { backgroundColor: pressed ? colors.hover : 'transparent' }
+                                    { backgroundColor: colors.hover }
                                 ]}
+                                hitSlop={{ top: 16, bottom: 16, left: 16, right: 16 }}
                             >
-                                <Ionicons name="close" size={22} color={colors.secondary} />
+                                <Ionicons name="close" size={24} color={colors.text} />
                             </Pressable>
                         </View>
                     </View>
 
-                    {/* Quick Note + New Folder Buttons */}
+                    {/* Yeni Not Butonu */}
                     <Pressable
                         style={({ pressed }) => [
-                            styles.quickNoteBtn,
+                            styles.newNoteBtn,
                             {
-                                backgroundColor: pressed ? colors.accent : colors.accentLight || colors.accent + '20',
+                                backgroundColor: pressed ? colors.accentDark : colors.accent,
+                                shadowColor: colors.fabShadow,
                             }
                         ]}
                         onPress={handleQuickNote}
                     >
-                        <Ionicons name="create-outline" size={16} color={colors.accent} />
-                        <Text style={[styles.quickNoteText, { color: colors.accent }]}>
-                            Hızlı Not
-                        </Text>
+                        <Ionicons name="add" size={20} color="#FFFFFF" />
+                        <Text style={styles.newNoteText}>Yeni Not</Text>
                     </Pressable>
 
-                    <Pressable
-                        style={({ pressed }) => [
-                            styles.newFolderBtn,
-                            {
-                                borderColor: colors.border,
-                                backgroundColor: pressed ? colors.hover : 'transparent',
-                            }
-                        ]}
-                        onPress={() => setIsAddingFolder(true)}
-                    >
-                        <Ionicons name="add-circle-outline" size={16} color={colors.accent} />
-                        <Text style={[styles.newFolderText, { color: colors.text }]}>
-                            Yeni Klasör
+                    {/* Notlar Bölümü */}
+                    <View style={styles.sectionHeader}>
+                        <Text style={[styles.sectionLabel, { color: colors.textSecondary }]}>
+                            TÜM NOTLAR
                         </Text>
-                    </Pressable>
+                        <Text style={[styles.sectionCount, { color: colors.placeholder }]}>
+                            {notes.length}
+                        </Text>
+                    </View>
 
-                    {/* New Folder Input */}
-                    {isAddingFolder && (
-                        <View style={styles.addFolderRow}>
-                            <TextInput
-                                style={[
-                                    styles.folderInput,
-                                    {
-                                        color: colors.text,
-                                        backgroundColor: colors.bg,
-                                        borderColor: colors.accent,
-                                    }
-                                ]}
-                                value={newFolderName}
-                                onChangeText={setNewFolderName}
-                                placeholder="Klasör adı"
-                                placeholderTextColor={colors.placeholder}
-                                autoFocus
-                                onSubmitEditing={handleAddFolder}
+                    <FlatList
+                        data={notes}
+                        keyExtractor={(item) => item.id}
+                        showsVerticalScrollIndicator={false}
+                        contentContainerStyle={{ paddingBottom: 20 }}
+                        renderItem={({ item }) => (
+                            <SidebarNoteItem
+                                note={item}
+                                colors={colors}
+                                onPress={handleNotePress}
                             />
-                            <Pressable style={styles.smallBtn} onPress={handleAddFolder}>
-                                <Ionicons name="checkmark" size={18} color={colors.accent} />
-                            </Pressable>
-                            <Pressable
-                                style={styles.smallBtn}
-                                onPress={() => {
-                                    setIsAddingFolder(false);
-                                    setNewFolderName('');
-                                }}
-                            >
-                                <Ionicons name="close" size={18} color={colors.secondary} />
-                            </Pressable>
-                        </View>
-                    )}
+                        )}
+                        ListEmptyComponent={() => (
+                            <View style={styles.emptyArea}>
+                                <Ionicons name="document-text-outline" size={24} color={colors.placeholder} />
+                                <Text style={[styles.emptyText, { color: colors.placeholder }]}>
+                                    Henüz not yok
+                                </Text>
+                            </View>
+                        )}
+                    />
 
-                    {/* User Info & Logout */}
+                    {/* Alt Kısım */}
                     <View style={[styles.footer, { borderTopColor: colors.border }]}>
                         <View style={styles.userRow}>
                             <View style={[styles.avatar, { backgroundColor: colors.accent }]}>
@@ -352,17 +231,19 @@ export default function Sidebar({ isOpen, onToggle }: SidebarProps) {
                                     {(user?.email || 'U')[0].toUpperCase()}
                                 </Text>
                             </View>
-                            <Text
-                                style={[styles.userEmail, { color: colors.secondary }]}
-                                numberOfLines={1}
-                            >
-                                {user?.email || 'Kullanıcı'}
-                            </Text>
+                            <View style={styles.userInfo}>
+                                <Text style={[styles.userName, { color: colors.text }]} numberOfLines={1}>
+                                    {user?.name || 'Kullanıcı'}
+                                </Text>
+                                <Text style={[styles.userEmail, { color: colors.textSecondary }]} numberOfLines={1}>
+                                    {user?.email || ''}
+                                </Text>
+                            </View>
                         </View>
                         <Pressable
                             style={({ pressed }) => [
                                 styles.logoutBtn,
-                                { backgroundColor: pressed ? colors.hover : 'transparent' }
+                                { backgroundColor: pressed ? colors.dangerLight : 'transparent' }
                             ]}
                             onPress={handleLogout}
                         >
@@ -372,8 +253,8 @@ export default function Sidebar({ isOpen, onToggle }: SidebarProps) {
                             </Text>
                         </Pressable>
                     </View>
-                </View >
-            </Animated.View >
+                </View>
+            </Animated.View>
         </>
     );
 }
@@ -392,15 +273,15 @@ const styles = StyleSheet.create({
         borderRightWidth: 1,
         elevation: 10,
         shadowColor: '#000',
-        shadowOffset: { width: 2, height: 0 },
-        shadowOpacity: 0.15,
-        shadowRadius: 10,
+        shadowOffset: { width: 4, height: 0 },
+        shadowOpacity: 0.1,
+        shadowRadius: 20,
     },
     sidebarContent: {
         flex: 1,
-        paddingTop: Platform.OS === 'android' ? 40 : 50,
+        paddingTop: Platform.OS === 'android' ? 38 : 50,
         paddingHorizontal: 16,
-        paddingBottom: 16,
+        paddingBottom: 12,
     },
     header: {
         flexDirection: 'row',
@@ -411,166 +292,153 @@ const styles = StyleSheet.create({
     headerLeft: {
         flexDirection: 'row',
         alignItems: 'center',
+        gap: 6,
     },
     headerRight: {
         flexDirection: 'row',
         alignItems: 'center',
-        gap: 4,
+        gap: 6,
     },
-    logo: {
-        fontSize: 20,
-        fontWeight: '700',
+    brandDot: {
+        width: 8,
+        height: 8,
+        borderRadius: 4,
+    },
+    brand: {
+        fontSize: 18,
+        fontWeight: '800',
         letterSpacing: -0.5,
     },
-    connectionDot: {
-        width: 7,
-        height: 7,
-        borderRadius: 4,
-        marginLeft: 8,
+    statusDot: {
+        width: 6,
+        height: 6,
+        borderRadius: 3,
     },
-    iconBtn: {
-        padding: 6,
-        borderRadius: 8,
+    themeBtn: {
+        width: 38,
+        height: 38,
+        borderRadius: 12,
+        alignItems: 'center',
+        justifyContent: 'center',
     },
     closeBtn: {
-        padding: 8,
-        borderRadius: 8,
-        minWidth: 36,
-        minHeight: 36,
-        alignItems: 'center' as const,
-        justifyContent: 'center' as const,
+        width: 38,
+        height: 38,
+        borderRadius: 12,
+        alignItems: 'center',
+        justifyContent: 'center',
     },
-    quickNoteBtn: {
+    newNoteBtn: {
         flexDirection: 'row',
         alignItems: 'center',
-        paddingVertical: 10,
-        paddingHorizontal: 12,
-        borderRadius: 8,
+        justifyContent: 'center',
+        paddingVertical: 12,
+        borderRadius: 12,
+        marginBottom: 20,
+        gap: 6,
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.3,
+        shadowRadius: 8,
+        elevation: 4,
+    },
+    newNoteText: {
+        color: '#FFFFFF',
+        fontSize: 14,
+        fontWeight: '700',
+    },
+    sectionHeader: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
         marginBottom: 8,
-    },
-    quickNoteText: {
-        fontSize: 13,
-        fontWeight: '600',
-        marginLeft: 8,
-    },
-    newFolderBtn: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        paddingVertical: 10,
-        paddingHorizontal: 12,
-        borderRadius: 8,
-        borderWidth: 1,
-        borderStyle: 'dashed',
-        marginBottom: 16,
-    },
-    newFolderText: {
-        fontSize: 13,
-        fontWeight: '500',
-        marginLeft: 8,
-    },
-    addFolderRow: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        marginBottom: 12,
-    },
-    folderInput: {
-        flex: 1,
-        paddingHorizontal: 10,
-        paddingVertical: 8,
-        borderWidth: 1.5,
-        borderRadius: 8,
-        fontSize: 13,
-    },
-    smallBtn: {
-        padding: 6,
-        marginLeft: 4,
     },
     sectionLabel: {
-        fontSize: 11,
+        fontSize: 10,
+        fontWeight: '700',
+        letterSpacing: 1.5,
+    },
+    sectionCount: {
+        fontSize: 10,
         fontWeight: '600',
-        letterSpacing: 1.2,
-        marginBottom: 8,
-    },
-    folderRow: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        paddingVertical: 8,
-        paddingHorizontal: 8,
-        borderRadius: 8,
-    },
-    folderName: {
-        fontSize: 14,
-        fontWeight: '500',
-        marginLeft: 8,
-        flex: 1,
-    },
-    addNoteBtn: {
-        padding: 4,
     },
     noteItem: {
         flexDirection: 'row',
         alignItems: 'center',
-        paddingVertical: 6,
-        paddingHorizontal: 8,
-        borderRadius: 6,
+        paddingVertical: 10,
+        paddingHorizontal: 10,
+        borderRadius: 10,
+        marginBottom: 2,
+        gap: 10,
+    },
+    noteIcon: {
+        width: 28,
+        height: 28,
+        borderRadius: 8,
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    noteInfo: {
+        flex: 1,
     },
     noteTitle: {
         fontSize: 13,
-        marginLeft: 8,
-        flex: 1,
+        fontWeight: '600',
+        marginBottom: 1,
+    },
+    noteDate: {
+        fontSize: 10,
+    },
+    emptyArea: {
+        alignItems: 'center',
+        paddingVertical: 24,
+        gap: 6,
     },
     emptyText: {
         fontSize: 12,
-        paddingVertical: 4,
-        paddingHorizontal: 8,
-    },
-    emptyFolder: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        paddingVertical: 12,
-        paddingHorizontal: 8,
-    },
-    emptyFolderText: {
-        fontSize: 13,
-        marginLeft: 8,
     },
     footer: {
         borderTopWidth: 1,
         paddingTop: 12,
-        marginTop: 8,
     },
     userRow: {
         flexDirection: 'row',
         alignItems: 'center',
         marginBottom: 10,
+        gap: 10,
     },
     avatar: {
-        width: 28,
-        height: 28,
-        borderRadius: 14,
+        width: 32,
+        height: 32,
+        borderRadius: 10,
         alignItems: 'center',
         justifyContent: 'center',
     },
     avatarText: {
         color: '#FFFFFF',
         fontSize: 13,
+        fontWeight: '700',
+    },
+    userInfo: {
+        flex: 1,
+    },
+    userName: {
+        fontSize: 13,
         fontWeight: '600',
     },
     userEmail: {
-        fontSize: 12,
-        marginLeft: 8,
-        flex: 1,
+        fontSize: 11,
+        marginTop: 1,
     },
     logoutBtn: {
         flexDirection: 'row',
         alignItems: 'center',
         paddingVertical: 8,
-        paddingHorizontal: 8,
-        borderRadius: 8,
+        paddingHorizontal: 10,
+        borderRadius: 10,
+        gap: 6,
     },
     logoutText: {
         fontSize: 13,
-        marginLeft: 8,
-        fontWeight: '500',
+        fontWeight: '600',
     },
 });

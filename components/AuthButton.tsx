@@ -1,5 +1,5 @@
-import React from 'react';
-import { Pressable, Text, ActivityIndicator, StyleSheet, View } from 'react-native';
+import React, { useRef } from 'react';
+import { Pressable, Text, ActivityIndicator, StyleSheet, Animated } from 'react-native';
 import { useColors } from '../stores/themeStore';
 
 interface AuthButtonProps {
@@ -17,47 +17,84 @@ export default function AuthButton({
 }: AuthButtonProps) {
     const colors = useColors();
     const isPrimary = variant === 'primary';
+    const scaleAnim = useRef(new Animated.Value(1)).current;
 
-    const bgColor = isPrimary ? '#2383E2' : 'transparent';
-    const textColor = isPrimary ? '#FFFFFF' : colors.text;
+    const handlePressIn = () => {
+        Animated.spring(scaleAnim, {
+            toValue: 0.97,
+            useNativeDriver: true,
+        }).start();
+    };
+
+    const handlePressOut = () => {
+        Animated.spring(scaleAnim, {
+            toValue: 1,
+            friction: 5,
+            useNativeDriver: true,
+        }).start();
+    };
 
     return (
-        <View style={{ marginTop: 8 }}>
+        <Animated.View style={[
+            styles.wrapper,
+            { transform: [{ scale: scaleAnim }] }
+        ]}>
             <Pressable
                 style={[
                     styles.button,
-                    {
-                        backgroundColor: bgColor,
-                        borderWidth: isPrimary ? 0 : 1,
-                        borderColor: colors.border,
-                        opacity: isLoading ? 0.7 : 1,
-                    }
+                    isPrimary
+                        ? {
+                            backgroundColor: colors.accent,
+                            shadowColor: colors.accent,
+                            shadowOffset: { width: 0, height: 4 },
+                            shadowOpacity: 0.3,
+                            shadowRadius: 8,
+                            elevation: 4,
+                        }
+                        : {
+                            backgroundColor: 'transparent',
+                            borderWidth: 1.5,
+                            borderColor: colors.border,
+                        },
+                    isLoading && { opacity: 0.7 },
                 ]}
                 onPress={onPress}
+                onPressIn={handlePressIn}
+                onPressOut={handlePressOut}
                 disabled={isLoading}
             >
                 {isLoading ? (
-                    <ActivityIndicator color={textColor} size="small" />
+                    <ActivityIndicator
+                        color={isPrimary ? '#FFFFFF' : colors.text}
+                        size="small"
+                    />
                 ) : (
-                    <Text style={[styles.text, { color: textColor }]}>
+                    <Text style={[
+                        styles.text,
+                        { color: isPrimary ? '#FFFFFF' : colors.text }
+                    ]}>
                         {title}
                     </Text>
                 )}
             </Pressable>
-        </View>
+        </Animated.View>
     );
 }
 
 const styles = StyleSheet.create({
+    wrapper: {
+        marginTop: 8,
+    },
     button: {
         width: '100%',
-        paddingVertical: 14,
-        borderRadius: 10,
+        paddingVertical: 16,
+        borderRadius: 14,
         alignItems: 'center',
         justifyContent: 'center',
     },
     text: {
         fontSize: 16,
-        fontWeight: '600',
+        fontWeight: '700',
+        letterSpacing: 0.3,
     },
 });

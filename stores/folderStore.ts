@@ -1,103 +1,121 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { create } from 'zustand';
-import { Q } from '@nozbe/watermelondb';
-import database from '../database';
-import Folder from '../database/models/Folder';
+import { useNoteStore } from './noteStore';
 
-interface FolderItem {
+export type FolderKind = 'system' | 'custom';
+
+export interface FolderItem {
     id: string;
     name: string;
-    isSynced: boolean;
+    kind: FolderKind;
+    createdAt: string;
 }
 
 interface FolderState {
-    folders: FolderItem[];
-    selectedFolderId: string | null;
-    isLoading: boolean;
-    loadFolders: () => Promise<void>;
-    createFolder: (name: string) => Promise<string>;
-    deleteFolder: (id: string) => Promise<void>;
+    initialized: boolean;
+    customFolders: FolderItem[];
+    initializeFolders: () => Promise<void>;
+    createFolder: (name: string) => Promise<FolderItem | null>;
     renameFolder: (id: string, name: string) => Promise<void>;
-    selectFolder: (id: string | null) => void;
+    deleteFolder: (id: string) => Promise<void>;
+}
+
+const STORAGE_KEY = 'noting.customFolders.v1';
+
+export const SYSTEM_FOLDERS: FolderItem[] = [
+    { id: 'notes', name: 'Notlar', kind: 'system', createdAt: '1970-01-01T00:00:00.000Z' },
+    { id: 'trash', name: 'Son Silinenler', kind: 'system', createdAt: '1970-01-01T00:00:00.000Z' },
+];
+
+async function persistFolders(folders: FolderItem[]) {
+    await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(folders));
 }
 
 export const useFolderStore = create<FolderState>((set, get) => ({
-    folders: [],
-    selectedFolderId: null,
-    isLoading: false,
+    initialized: false,
+    customFolders: [],
 
-    loadFolders: async () => {
-        set({ isLoading: true });
+    initializeFolders: async () => {
+        if (get().initialized) return;
+
         try {
-            const foldersCollection = database.get<Folder>('folders');
-            const allFolders = await foldersCollection.query().fetch();
-            const folderItems: FolderItem[] = allFolders.map((f) => ({
-                id: f.id,
-                name: f.name,
-                isSynced: f.isSynced,
-            }));
-            set({ folders: folderItems, isLoading: false });
-        } catch (err) {
-            console.error('loadFolders error:', err);
-            set({ isLoading: false });
+            const raw = await AsyncStorage.getItem(STORAGE_KEY);
+            if (!raw) {
+                set({ customFolders: [], initialized: true });
+                return;
+            }
+
+            const parsed = JSON.parse(raw);
+            if (!Array.isArray(parsed)) {
+                set({ customFolders: [], initialized: true });
+                return;
+            }
+
+            const folders = parsed
+                .filter((item) => item && typeof item.id === 'string' && typeof item.name === 'string')
+                .map((item) => ({
+                    id: item.id,
+                    name: item.name,
+                    kind: 'custom' as const,
+                    createdAt: typeof item.createdAt === 'string' ? item.createdAt : new Date().toISOString(),
+                }));
+
+            set({ customFolders: folders, initialized: true });
+        } catch (error) {
+            console.warn('[FolderStore] initializeFolders failed:', error);
+            set({ customFolders: [], initialized: true });
         }
     },
 
     createFolder: async (name: string) => {
+        const trimmed = name.trim();
+        if (!trimmed) return null;
+
+        const folder: FolderItem = {
+            id: `folder-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`,
+            name: trimmed,
+            kind: 'custom',
+            createdAt: new Date().toISOString(),
+        };
+
+        const next = [...get().customFolders, folder];
+        set({ customFolders: next });
+
         try {
-            const foldersCollection = database.get<Folder>('folders');
-            let newFolderId = '';
-            await database.write(async () => {
-                const newFolder = await foldersCollection.create((folder: any) => {
-                    folder.name = name;
-                    folder.isSynced = false;
-                });
-                newFolderId = newFolder.id;
-            });
-            await get().loadFolders();
-            return newFolderId;
-        } catch (err) {
-            console.error('createFolder error:', err);
-            return '';
+            await persistFolders(next);
+        } catch (error) {
+            console.warn('[FolderStore] createFolder persist failed:', error);
+        }
+
+        return folder;
+    },
+
+    renameFolder: async (id: string, name: string) => {
+        const trimmed = name.trim();
+        if (!trimmed) return;
+
+        const next = get().customFolders.map((folder) =>
+            folder.id === id ? { ...folder, name: trimmed } : folder
+        );
+        set({ customFolders: next });
+
+        try {
+            await persistFolders(next);
+        } catch (error) {
+            console.warn('[FolderStore] renameFolder persist failed:', error);
         }
     },
 
     deleteFolder: async (id: string) => {
-        try {
-            await database.write(async () => {
-                const folder = await database.get<Folder>('folders').find(id);
-                // Delete all notes in the folder first
-                const notes = await folder.notes.fetch();
-                for (const note of notes) {
-                    await note.markAsDeleted();
-                }
-                await folder.markAsDeleted();
-            });
-            const { selectedFolderId } = get();
-            if (selectedFolderId === id) {
-                set({ selectedFolderId: null });
-            }
-            await get().loadFolders();
-        } catch (err) {
-            console.error('deleteFolder error:', err);
-        }
-    },
+        const next = get().customFolders.filter((folder) => folder.id !== id);
+        set({ customFolders: next });
 
-    renameFolder: async (id: string, name: string) => {
-        try {
-            await database.write(async () => {
-                const folder = await database.get<Folder>('folders').find(id);
-                await folder.update((f: any) => {
-                    f.name = name;
-                    f.isSynced = false;
-                });
-            });
-            await get().loadFolders();
-        } catch (err) {
-            console.error('renameFolder error:', err);
-        }
-    },
+        await useNoteStore.getState().clearFolderAssignmentsForFolder(id);
 
-    selectFolder: (id: string | null) => {
-        set({ selectedFolderId: id });
+        try {
+            await persistFolders(next);
+        } catch (error) {
+            console.warn('[FolderStore] deleteFolder persist failed:', error);
+        }
     },
 }));

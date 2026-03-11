@@ -187,10 +187,10 @@ export default function DrawingBlock({
     // ========== EMPTY ==========
     if (!isEditing && !initialBase64) {
         return (
-            <View style={[styles.emptyWrap, { borderColor: colors.border, backgroundColor: colors.card }]}>
+            <View style={[styles.emptyWrap, { borderColor: colors.border, backgroundColor: colors.card, minHeight: 120 }]}>
                 <View style={styles.empty}>
                     <Pressable onPress={() => setIsEditing(true)} style={[styles.startBtn, { backgroundColor: colors.accentLight }]}>
-                        <Ionicons name="brush-outline" size={20} color={colors.accent} />
+                        <Ionicons name="brush-outline" size={24} color={colors.accent} />
                     </Pressable>
                 </View>
                 {onDelete && (
@@ -223,7 +223,7 @@ export default function DrawingBlock({
                 ))}
                 <View style={[styles.sep, { backgroundColor: colors.border }]} />
                 <Pressable onPress={onCl} style={styles.actBtn}>
-                    <Ionicons name="refresh-outline" size={16} color={colors.secondary} />
+                    <Ionicons name="refresh-outline" size={16} color={colors.textSecondary} />
                 </Pressable>
             </View>
             <View style={styles.grp}>

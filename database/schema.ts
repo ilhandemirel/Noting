@@ -1,26 +1,15 @@
 import { appSchema, tableSchema } from '@nozbe/watermelondb';
 
-export const schema = appSchema({
-    version: 3,
+export default appSchema({
+    version: 2, // Incremented to force DB wipe and apply new scheme
     tables: [
-        tableSchema({
-            name: 'folders',
-            columns: [
-                { name: 'name', type: 'string' },
-                { name: 'remote_id', type: 'string', isOptional: true },
-                { name: 'is_synced', type: 'boolean' },
-                { name: 'created_at', type: 'number' },
-                { name: 'updated_at', type: 'number' },
-            ],
-        }),
         tableSchema({
             name: 'notes',
             columns: [
                 { name: 'title', type: 'string' },
-                { name: 'content', type: 'string' },
-                { name: 'folder_id', type: 'string', isOptional: true, isIndexed: true },
+                { name: 'content', type: 'string' }, // Store JSON as string
                 { name: 'reminder_date', type: 'number', isOptional: true },
-                { name: 'remote_id', type: 'string', isOptional: true },
+                { name: 'remote_id', type: 'string', isOptional: true }, // PocketBase ID
                 { name: 'is_synced', type: 'boolean' },
                 { name: 'created_at', type: 'number' },
                 { name: 'updated_at', type: 'number' },

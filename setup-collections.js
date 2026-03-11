@@ -1,5 +1,5 @@
-// PocketBase v0.25 Collection Setup Script
-const PB_URL = process.argv[2] || 'http://192.168.1.198:8090';
+// PocketBase v0.25 Collection Setup Script (Updated to Remove Folders)
+const PB_URL = process.argv[2] || 'http://127.0.0.1:8090';
 const ADMIN_EMAIL = process.argv[3] || 'ilhandemirel23@gmail.com';
 const ADMIN_PASSWORD = process.argv[4] || 'ilhan3130';
 
@@ -25,40 +25,41 @@ async function main() {
         'Authorization': token,
     };
 
-    // Create "folders" collection
-    console.log('📁 Creating "folders" collection...');
-    const foldersRes = await fetch(`${PB_URL}/api/collections`, {
-        method: 'POST',
+    // 1. Delete "folders" collection if exists
+    console.log('🗑️ Deleting "folders" collection...');
+    const delFoldersRes = await fetch(`${PB_URL}/api/collections/folders`, {
+        method: 'DELETE',
         headers,
-        body: JSON.stringify({
-            name: 'folders',
-            type: 'base',
-            fields: [
-                { name: 'name', type: 'text', required: true },
-                { name: 'user_id', type: 'relation', required: true, collectionId: '_pb_users_auth_', maxSelect: 1 },
-                { name: 'created_at', type: 'autodate', onCreate: true, onUpdate: false },
-                { name: 'updated_at', type: 'autodate', onCreate: true, onUpdate: true },
-            ],
-            listRule: '@request.auth.id = user_id',
-            viewRule: '@request.auth.id = user_id',
-            createRule: '@request.auth.id != ""',
-            updateRule: '@request.auth.id = user_id',
-            deleteRule: '@request.auth.id = user_id',
-        }),
     });
-
-    if (foldersRes.ok) {
-        console.log('✅ "folders" collection created');
+    if (delFoldersRes.ok) {
+        console.log('✅ "folders" collection deleted');
     } else {
-        const err = await foldersRes.text();
-        if (err.includes('already exists')) {
-            console.log('⚠️  "folders" already exists, skipping');
+        const err = await delFoldersRes.text();
+        if (err.includes('not found')) {
+            console.log('⚠️  "folders" not found, skipping delete');
         } else {
-            console.error('❌ Failed:', err);
+            console.error('❌ Failed to delete folders:', err);
         }
     }
 
-    // Create "notes" collection
+    // 2. Delete "notes" collection if exists
+    console.log('🗑️ Deleting "notes" collection...');
+    const delNotesRes = await fetch(`${PB_URL}/api/collections/notes`, {
+        method: 'DELETE',
+        headers,
+    });
+    if (delNotesRes.ok) {
+        console.log('✅ "notes" collection deleted');
+    } else {
+        const err = await delNotesRes.text();
+        if (err.includes('not found')) {
+            console.log('⚠️  "notes" not found, skipping delete');
+        } else {
+            console.error('❌ Failed to delete notes:', err);
+        }
+    }
+
+    // 3. Create fresh "notes" collection (NO FOLDER RELATION)
     console.log('📝 Creating "notes" collection...');
     const notesRes = await fetch(`${PB_URL}/api/collections`, {
         method: 'POST',
@@ -69,7 +70,6 @@ async function main() {
             fields: [
                 { name: 'title', type: 'text', required: true },
                 { name: 'content', type: 'json', required: false },
-                { name: 'folder_id', type: 'text', required: true },
                 { name: 'reminder_date', type: 'date', required: false },
                 { name: 'user_id', type: 'relation', required: true, collectionId: '_pb_users_auth_', maxSelect: 1 },
                 { name: 'created_at', type: 'autodate', onCreate: true, onUpdate: false },
@@ -87,11 +87,7 @@ async function main() {
         console.log('✅ "notes" collection created');
     } else {
         const err = await notesRes.text();
-        if (err.includes('already exists')) {
-            console.log('⚠️  "notes" already exists, skipping');
-        } else {
-            console.error('❌ Failed:', err);
-        }
+        console.error('❌ Failed to create notes:', err);
     }
 
     console.log('\n🎉 Setup complete!\n');

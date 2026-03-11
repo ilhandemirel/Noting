@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import pb from '../services/pocketbase';
+import pb, { loadSavedAuth } from '../services/pocketbase';
 import * as WebBrowser from 'expo-web-browser';
 import * as Linking from 'expo-linking';
 import { Platform } from 'react-native';
@@ -18,7 +18,7 @@ interface AuthState {
     isAuthenticated: boolean;
     isLoading: boolean;
     error: string | null;
-    initialize: () => void;
+    initialize: () => Promise<void>;
     login: (email: string, password: string) => Promise<void>;
     loginWithGoogle: () => Promise<void>;
     register: (email: string, password: string, passwordConfirm: string) => Promise<void>;
@@ -33,8 +33,10 @@ export const useAuthStore = create<AuthState>((set) => ({
     isLoading: false,
     error: null,
 
-    // Restore session from PocketBase's persisted authStore
-    initialize: () => {
+    initialize: async () => {
+        // Önce kaydedilmiş oturumu yükle (native için)
+        await loadSavedAuth();
+
         if (pb.authStore.isValid && pb.authStore.record) {
             const record = pb.authStore.record;
             set({
@@ -71,7 +73,7 @@ export const useAuthStore = create<AuthState>((set) => ({
                 isLoading: false,
             });
         } catch (err: any) {
-            let errorMessage = 'Giris basarisiz. Lutfen tekrar deneyin.';
+            let errorMessage = 'Giriş başarısız. Lütfen tekrar deneyin.';
 
             const errData = err?.data?.data || err?.response?.data;
             if (errData && typeof errData === 'object') {
@@ -108,13 +110,18 @@ export const useAuthStore = create<AuthState>((set) => ({
                 return;
             }
 
+            // Native: OAuth2 akışı
             const redirectUrl = Linking.createURL('/(auth)/login');
+
             const authMethods = await pb.collection('users').listAuthMethods();
-            const provider = (authMethods as any).authProviders.find((p: any) => p.name === 'google');
+            const providers = (authMethods as any).authProviders || (authMethods as any).oauth2?.providers || [];
+            const provider = providers.find((p: any) => p.name === 'google');
 
-            if (!provider) throw new Error('Google provider not configured');
+            if (!provider) {
+                throw new Error('Google sağlayıcısı yapılandırılmamış. PocketBase ayarlarını kontrol edin.');
+            }
 
-            const authUrl = provider.authUrl + redirectUrl;
+            const authUrl = provider.authUrl + encodeURIComponent(redirectUrl);
             const response = await WebBrowser.openAuthSessionAsync(authUrl, redirectUrl);
 
             if (response.type === 'success') {
@@ -123,11 +130,11 @@ export const useAuthStore = create<AuthState>((set) => ({
                 const state = parsedUrl.queryParams?.state as string;
 
                 if (state !== provider.state) {
-                    throw new Error('State mismatch, authentication aborted');
+                    throw new Error('Güvenlik doğrulaması başarısız, giriş iptal edildi.');
                 }
 
                 if (code && provider.codeVerifier) {
-                    const authData = await pb.collection('users').authWithOAuth2Code(
+                    const finalAuthData = await pb.collection('users').authWithOAuth2Code(
                         'google',
                         code,
                         provider.codeVerifier,
@@ -136,22 +143,22 @@ export const useAuthStore = create<AuthState>((set) => ({
 
                     set({
                         user: {
-                            id: authData.record.id,
-                            email: authData.record.email,
-                            name: authData.record.name || authData.meta?.name || '',
+                            id: finalAuthData.record.id,
+                            email: finalAuthData.record.email,
+                            name: finalAuthData.record.name || finalAuthData.meta?.name || '',
                         },
-                        token: authData.token,
+                        token: finalAuthData.token,
                         isAuthenticated: true,
                         isLoading: false,
                     });
                 } else {
-                    throw new Error('Could not get authorization code');
+                    throw new Error('Yetkilendirme kodu alınamadı.');
                 }
             } else {
-                throw new Error('Authentication cancelled by user');
+                throw new Error('Giriş kullanıcı tarafından iptal edildi.');
             }
         } catch (err: any) {
-            let errorMessage = 'Google ile giris basarisiz. Lutfen tekrar deneyin.';
+            let errorMessage = 'Google ile giriş başarısız. Lütfen tekrar deneyin.';
 
             if (err?.message) {
                 errorMessage = err.message;
@@ -172,7 +179,7 @@ export const useAuthStore = create<AuthState>((set) => ({
                 password,
                 passwordConfirm,
             });
-            // Auto-login after registration
+            // Kayıttan sonra otomatik giriş
             const authData = await pb.collection('users').authWithPassword(email, password);
             set({
                 user: {
@@ -185,7 +192,7 @@ export const useAuthStore = create<AuthState>((set) => ({
                 isLoading: false,
             });
         } catch (err: any) {
-            let errorMessage = 'Kayit basarisiz. Lutfen tekrar deneyin.';
+            let errorMessage = 'Kayıt başarısız. Lütfen tekrar deneyin.';
 
             const errData = err?.data?.data || err?.response?.data;
             if (errData && typeof errData === 'object') {

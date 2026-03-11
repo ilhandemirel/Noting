@@ -14,12 +14,12 @@ export default function NoteScreen() {
         return () => {
             clearActiveNote();
         };
-    }, []);
+    }, [clearActiveNote]);
 
     if (!id) {
         return (
             <View style={[styles.container, { backgroundColor: colors.bg }]}>
-                <Text style={{ color: colors.secondary }}>Not bulunamadı</Text>
+                <Text style={{ color: colors.textSecondary }}>Not bulunamadı</Text>
             </View>
         );
     }

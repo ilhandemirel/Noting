@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'expo-router';
 import { View, ActivityIndicator, StyleSheet } from 'react-native';
 import { useAuthStore } from '../stores/authStore';
@@ -9,22 +9,24 @@ export default function Index() {
     const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
     const initialize = useAuthStore((s) => s.initialize);
     const colors = useColors();
+    const [isReady, setIsReady] = useState(false);
 
     useEffect(() => {
-        // Restore session from PocketBase's persisted auth store
-        initialize();
+        const init = async () => {
+            await initialize();
+            setIsReady(true);
+        };
+        init();
     }, []);
 
     useEffect(() => {
-        const timeout = setTimeout(() => {
-            if (isAuthenticated) {
-                router.replace('/(main)');
-            } else {
-                router.replace('/(auth)/login');
-            }
-        }, 100);
-        return () => clearTimeout(timeout);
-    }, [isAuthenticated]);
+        if (!isReady) return;
+        if (isAuthenticated) {
+            router.replace('/(main)');
+        } else {
+            router.replace('/(auth)/login');
+        }
+    }, [isReady, isAuthenticated, router]);
 
     return (
         <View style={[styles.container, { backgroundColor: colors.bg }]}>
