@@ -6,7 +6,9 @@ services:
       context: ./pocketbase
     container_name: noting_pb
     restart: unless-stopped
+    working_dir: /pb
     volumes:
       - ./pb_data:/pb/pb_data
     ports:
-      - "8090:8080"
+      - "8090:8090"
+    command: ["/pb/pocketbase", "serve", "--http=0.0.0.0:8090", "--dir=/pb/pb_data"]
