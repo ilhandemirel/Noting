@@ -1,8 +1,8 @@
 /// <reference path="../pb_data/types.d.ts" />
 migrate((app) => {
   const collection = new Collection({
-    "id": "pbc_3395098727",
-    "name": "notes",
+    "id": "pbc_1868868837",
+    "name": "folders",
     "type": "base",
     "system": false,
     "fields": [
@@ -17,27 +17,11 @@ migrate((app) => {
         "autogeneratePattern": "[a-z0-9]{15}"
       },
       {
-        "id": "text724990059",
-        "name": "title",
+        "id": "text1579384326",
+        "name": "name",
         "type": "text",
         "system": false,
         "required": true,
-        "presentable": false
-      },
-      {
-        "id": "json4274335913",
-        "name": "content",
-        "type": "json",
-        "system": false,
-        "required": false,
-        "presentable": false
-      },
-      {
-        "id": "date3177376595",
-        "name": "reminder_date",
-        "type": "date",
-        "system": false,
-        "required": false,
         "presentable": false
       },
       {
@@ -81,6 +65,6 @@ migrate((app) => {
 
   return app.save(collection);
 }, (app) => {
-  const collection = app.findCollectionByNameOrId("pbc_3395098727");
+  const collection = app.findCollectionByNameOrId("pbc_1868868837");
   return app.delete(collection);
 })
