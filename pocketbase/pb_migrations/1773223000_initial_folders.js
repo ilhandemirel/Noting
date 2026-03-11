@@ -7,16 +7,6 @@ migrate((app) => {
     "system": false,
     "fields": [
       {
-        "id": "text3208210256",
-        "name": "id",
-        "type": "text",
-        "system": true,
-        "required": true,
-        "presentable": false,
-        "primaryKey": true,
-        "autogeneratePattern": "[a-z0-9]{15}"
-      },
-      {
         "id": "text1579384326",
         "name": "name",
         "type": "text",

@@ -174,7 +174,8 @@ export async function performSync() {
         console.log('[Sync] Completed successfully at', lastSyncTime);
     } catch (err: any) {
         consecutiveFailures++;
-        console.error(`[Sync] Error (failure ${consecutiveFailures}/${MAX_CONSECUTIVE_FAILURES}):`, err?.message || err);
+        const errorDetail = err?.data ? JSON.stringify(err.data) : (err?.message || err);
+        console.error(`[Sync] Error (failure ${consecutiveFailures}/${MAX_CONSECUTIVE_FAILURES}):`, errorDetail);
 
         if (consecutiveFailures >= MAX_CONSECUTIVE_FAILURES) {
             console.warn('[Sync] Too many consecutive failures, backing off. Will retry when connectivity changes.');

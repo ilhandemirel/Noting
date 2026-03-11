@@ -40,4 +40,4 @@ Veri tabanını tarayıcıdan yönetmek için:
 > [!NOTE]
 > Bu panelden tüm notlara ve kullanıcılara müdahale edebilirsin.
 
-İyi çalışmalar! Herhangi bir sorun olursa bana yaz.
+
