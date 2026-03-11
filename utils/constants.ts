@@ -1,1 +1,1 @@
-export const POCKETBASE_URL = 'http://localhost:8090';
+export const POCKETBASE_URL = process.env.EXPO_PUBLIC_PB_URL || 'http://localhost:8090';

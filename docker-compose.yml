@@ -1,0 +1,20 @@
+version: '3.8'
+
+services:
+  pocketbase:
+    build:
+      context: ./pocketbase
+    container_name: noting_pb
+    restart: unless-stopped
+    volumes:
+      - ./pb_data:/pb/pb_data
+    ports:
+      - "8090:8080" # Map host 8090 to container 8080
+
+  tunnel:
+    image: cloudflare/cloudflared:latest
+    container_name: noting_tunnel
+    restart: unless-stopped
+    command: tunnel --no-autoupdate run
+    environment:
+      - TUNNEL_TOKEN=${TUNNEL_TOKEN}
